@@ -1,0 +1,9 @@
+Files under upstream/ are unmodified third-party material licensed under
+Apache License 2.0. See upstream/LICENSE and
+upstream/plugins/feature-dev/LICENSE for full terms.
+
+Original Pi compatibility adapter, tests and documentation in this repository:
+Copyright (c) 2026 xinliangle100. All rights reserved.
+No additional license is granted for those original files by this notice.
+The package is private:true to prevent accidental npm publication; the GitHub
+repository is public. Public visibility does not change these license terms.

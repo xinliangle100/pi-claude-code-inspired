@@ -1,96 +1,73 @@
-# pi-claude-code-inspired
+# pi-claude-code-inspired — faithful baseline 0.2.0
 
-一个从 Claude Code 官方开放插件与公开文档学习工作方法、迁移到 Pi 的独立非官方实验包。不是 Claude Code 核心实现，也不要求更换为 Claude 模型。
+**先忠实保留来源，再单独标明适配。** 本包学习的是 Anthropic 官方公开 `feature-dev` 插件，**不是 Claude Code 私有核心 harness 的复刻**，也不声称换一个包就能获得 Claude 的模型能力。
 
-目标是把可追溯的方法变成独立、可选择的资源，而不是复制系统提示词：从输入到副作用的探索、主 Agent 亲读关键文件、真实设计取舍、基于具体回归证据的审查。架构一致性是重要场景，但不局限于这一点；主 Agent 仍直接负责开发，子 Agent 可选。
+原文固定在 `anthropics/claude-plugins-official` 的 [`58267944f92187b7d6a1c822165c96c81c864806`](https://github.com/anthropics/claude-plugins-official/tree/58267944f92187b7d6a1c822165c96c81c864806/plugins/feature-dev)。四份提示词逐字节保存在 `upstream/`，未重写成自己的 Skill。版本 0.1 的自创 checkpoint/decision ledger、三个改写 Skill 和混合建议已移除；历史备份见 `archive/adapted-v0.1` 分支。
 
-## 当前范围
+## 安装与使用
 
-- `claude-explore`：追踪执行、数据转换和副作用，交接必读文件，并由实施者亲自核实。
-- `claude-plan`：沿用项目惯例，仅在真实取舍存在时比较设计视角，形成组件、接口、数据流与实施顺序。
-- `claude-verify`：从正确性、项目规则与复杂度审查变更，报告可定位、可解释的缺陷及真实检查结果，不凑问题数量。
-- 可选 Extension：独立开关的简短工作方法提示与结构化决策记录。默认关闭，不改变模型、思考等级、权限或活动工具名单。
-
-Skill 是方法提示，不是强制门禁。Extension 的记录和提示也不是架构正确性证明，更不是文件系统沙箱。目前没有自动测试门禁、自动多 Agent 编排或对 Claude Code 私有上下文管理/压缩实现的复刻。
-
-## 使用前
-
-本地开发基线是 `@earendil-works/pi-coding-agent` 1.4.0；需要 Node.js >= 22.19.0。旧版 Pi 的包名和 API 可能不同，尚未做兼容性承诺。
-
-建议在一个可丢弃的测试项目和独立会话里先试。阅读代码后再加载：Extension 在 Pi 进程中运行，具有该进程的权限。本项目不会替你安装到全局 Pi，也不会修改现有模型、认证或插件配置。
-
-Pi 官方支持一次性加载本地包（从本项目目录执行）：
+需要已安装并登录的 Pi；适配器验证版本为 `@earendil-works/pi-coding-agent` **1.4.0**，Node >=22.19.0。本仓库不会帮你安装 Pi、修改全局设置或申请其他凭据。
 
 ```sh
-pi -e .
+pi install git:github.com/xinliangle100/pi-claude-code-inspired
 ```
 
-长期使用时，用户可自行选择 `pi install /absolute/path/to/pi-claude-code-inspired`。这会修改 Pi 的包配置，因此不是本项目验证脚本自动执行的动作。
+或者克隆后仅为当前运行加载：
 
-Skill 可显式调用：
+```sh
+git clone https://github.com/xinliangle100/pi-claude-code-inspired.git
+pi -e ./pi-claude-code-inspired/extensions/index.ts
+```
+
+在 Pi 中先选择你要使用的模型，再输入：
 
 ```text
-/skill:claude-explore 解释当前功能的入口、调用链和扩展点
-/skill:claude-plan 基于现有实现规划这个需求
-/skill:claude-verify 检查这次变更是否满足验收条件
+/feature-dev --map-sonnet-to-current 你要开发的功能
 ```
 
-Skill 目录可能被模型自动发现。Extension 默认关闭不等于禁用 Skills；若只想加载部分资源，用 `pi config` 或 Pi 包的资源过滤设置分别启停。安装两个 inspired 包时，做对照试验应分别启用，不要同时叠加两套指导。
+**这个参数不是形式上的开关。** 上游三类 agent 的 frontmatter 都指定 `model: sonnet`。Pi 适配器没有相同的 Claude 模型别名解析器；你必须显式授权将它映射到当前 Pi 模型。子 agent 使用工具调用时的当前模型和 thinking level（若宿主未提供则 off），不会另选模型或读取凭据文件。换用 GPT 等模型不代表同等行为或质量。未提供这个参数时，只显示用法，不启动工作流。重开、切换、分叉或树导航后需重新授权。
 
-### 可选模块开关
+加载包本身不改变主 agent 的 system prompt，也不自动启动任务；两个工具默认不激活。命令只追加激活自己的工具，不移除或恢复用户原来的工具集。无单独 `/off` 命令；要彻底卸载本扩展，结束当前 Pi 运行并在下次运行不加载，或通过 Pi 包管理移除。
 
-```text
-/claude-inspired status
-/claude-inspired guidance on
-/claude-inspired decisions on
-/claude-inspired off
-/claude-inspired clear
-```
+## 原始流程是什么
 
-`guidance` 只追加一段简短方法指导；`decisions` 允许保存或完整替换一个决策检查点，并在后续请求时注入当前记录。`on` 同时开启两项；也可以分别 `off`。状态随当前 Pi 会话分支保存，不写全局设置；新分支沿用其实际历史中的状态，不读取其他分支的后来决策。
+完整原文见 [feature-dev.md](upstream/plugins/feature-dev/commands/feature-dev.md)：
 
-检查点工具 `claude_checkpoint` 使用 Pi 1.4.0 的 deferred 暴露方式：支持工具搜索/代码模式的会话可以发现和调用它；本包不会擅自激活这些宿主工具，也不修改活动工具名单。若当前会话没有适用调用路径，可手动执行 `/claude-inspired checkpoint <JSON>`，传入下列全部字段；启用 decisions 是前提，加载包或在对话中写一段摘要不等于已保存。
+1. Discovery：建立全阶段 todo，理解需求并确认。
+2. Codebase Exploration：并行 **2–3** 个 explorer；主 agent 亲自读各 agent 推荐的文件。
+3. Clarifying Questions：集中询问不明确事项，**等待答案后再设计**；用户说自行决定也要给建议并取得明确确认。
+4. Architecture Design：并行 **2–3** 个 architect，从原文规定的不同角度出方案，推荐并询问用户偏好。
+5. Implementation：**明确批准后**才实施，遵循选定架构。
+6. Quality Review：并行 **3** 个 reviewer，分别关注原文的三类问题；汇总后询问用户如何处理。reviewer 只报告置信度 **≥80** 的问题。
+7. Summary：完成 todos，交付总结。
 
-```json
-{"goal":"增加 CSV 导出","constraints":["不新增依赖"],"decision":"扩展现有格式注册表","rationale":"相似功能已有同一入口","openQuestions":[],"verification":"尚未运行","references":["src/formats/index.js"]}
-```
+这些阶段、询问和审批是**上游提示词约束，不是硬编码审批系统**。适配器硬编码的只有合法角色、批次数量、显式模型映射和工具范围。模型仍可能漏读、误解或违反提示词；本包不保证“结构以后不用改”。
 
-检查点最多 6,000 个序列化字符，包含目标、约束、决策及理由、开放问题、自述验证状态和引用。验证字段不是测试结果采集器；所有记录都可能过时，需要结合最新用户要求和代码重新核对。关闭 decisions 后不再注入检查点；重新启用会恢复当前分支保存的记录，换任务时应先清除或替换。
+## 可运行部分与边界
 
-工具定义会注册并可被工具搜索发现，但默认不进入直接声明列表，也不会因开关而增删其他活动或待恢复工具。关闭时调用检查点工具仍会明确报错，不会偷偷保存；“关闭”不是安全隔离或完全隐藏工具定义。`clear` 只清除当前检查点，不会删除历史 session 文件中的旧记录。不要记录密码、密钥、token 或完整日志；代码有有限的常见凭据格式拦截，但它不是完整的数据泄漏防护。
+- `/feature-dev`：加载原始 command 正文，仅替换 `$ARGUMENTS`，前面添加明确标记的 Pi 兼容说明。
+- `feature_dev_agents`：真实独立 Pi Agent 并行执行，不是主 agent 假扮多位审查者；不自动复制父会话历史。主 agent 需要传递任务、必要发现和 review diff。
+- `feature_dev_todos`：TodoWrite 的最小兼容输出，保存于工具调用结果/宿主会话消息中，不是额外 decision ledger，没有自创压缩保留策略。
+- 子 agent 使用原始 agent 正文和兼容说明；原始 frontmatter 完整留作可追溯来源，model/tools/color 不直接伪装成 Pi 原生配置。
+- Read/Glob/Grep/LS → 宿主 read/find/grep/ls，通过 **`ctx.executeTool`** 走宿主工具检查与 hooks。查不到的工具明确列为 missing，不偷偷增加权限。
+- 子 agent 的 TodoWrite → 本包 todo 工具。NotebookRead、WebFetch、WebSearch、KillShell、BashOutput **未实现**。不声称具备这些能力。
+- reviewer 正文要求默认 `git diff`，但其上游 tools frontmatter **没有 Bash**。本包不擅自加 Bash：主 agent 应提供实际 diff，否则报告不能完成该范围。代理没有 edit/write/bash。
+- API 失败、取消或子 agent 最终失败会作为 batch 失败返回，不降级成主 agent 代做。宿主工具权限拒绝会反馈为子 agent 的工具错误；它仍可能继续回答，能否准确说明受限范围依赖模型，不能把权限拒绝误称为必然中止整个 batch。
+- 原始 agent 各自的 CLAUDE.md 指令仍在。不会读取或注入整个父会话/主 system prompt；这不是完整继承父 agent 的所有提示词策略。宿主工具 hooks 得以复用，但本包不创建操作系统沙箱，也未实现 Claude 核心上下文压缩、恢复、权限系统。
+- 子 agent 本次运行不落盘、不自动压缩或跨进程恢复；长任务可能达到模型上下文上限。todo 与主工作流受 Pi 自己的会话/压缩策略影响。没有新增任意轮数/费用上限；一次并行调用会带来 2–3 个 agent 的实际用量。
 
-## 开发与验证
+## 验证与来源
 
 ```sh
 npm ci --ignore-scripts
 npm run check
 ```
 
-开发依赖中的 Pi 用于类型和加载验证，不应打包成运行时副本。宿主提供的 Pi 包和 typebox 只声明为 peer dependencies。
+已做源码字节哈希、原始阶段/阈值、并行数量与启动、宿主工具代理、实际 Pi Agent 生命周期（假 provider、不消费额度）、真实 Pi 扩展加载测试。**未做真实模型端到端执行或质量对比**，因此不能从测试通过推断效果优于原生 Pi。
 
-测试通过只能证明已覆盖的程序行为，不能证明模型决策变好。实际收益用 [评估方案](docs/evaluation.md) 衡量；源码依据与迁移边界见 [来源记录](docs/sources.md)。最终执行结果另记于 `docs/validation.md`，不把测试计划当作测试结果。
+- [来源与调用关系](docs/sources.md)
+- [适配差异与验证范围](docs/validation.md)
+- [后续对比方法](docs/evaluation.md)
+- [许可证](LICENSE) / [第三方声明](NOTICE)
 
-## 与 Codex-inspired 包怎样对比
-
-两包刻意共享我们原创的运行时基础设施：独立开关、分支内决策记录、deferred 检查点、默认关闭、不改活动工具名单。区别主要在各自来源驱动的 Skills 和可选方法指导，而不是两套独立发明的记忆引擎。这里重写的方法不是把 Codex 改名；也不是声称这些方法只属于 Claude。
-
-1. 同一仓库起点、同一需求、同一 Sol / High 和工具权限，分别开干净副本与独立会话。
-2. 分别只加载 Codex-inspired 或本包；关闭另一包的 Skills 与 guidance，不能仅把其 Extension 关掉。不要在同一会话叠加两套指导后比较。
-3. 先比较 Skill-only，再为两边开启相同模块；记录实际开关和工具轨迹。保留原始 Pi 作为第三个基线。
-4. 使用同一 [样本、验收条件和指标](docs/evaluation.md)，比较首轮方案改写、首次验收、返工与成本，不按提示词长度评胜负。
-
-还没有证据证明任一包优于原始 Pi 或另一包；模型自身判断仍是主要变量。本包不照搬官方插件的强制七阶段、固定并行 Agent 数量、普遍审批停顿或数值信心阈值。
-
-## 迭代方向
-
-1. 先验证 Skills 是否改善首轮方案、代码库适配和首次交付。
-2. 用可选择的 Extension 保留关键决策，验证开关、分支恢复、压缩后注入与需求纠正。
-3. 有真实失败样例后再增加写入前检查、实际验证证据门禁和独立审查；不把每次小修复变成复杂流程。
-
-新模块应包含：来源和版本、软提示/程序机制边界、默认状态、关闭方法、测试案例、已知限制。升级依据是验证结果，不是提示词长度或子 Agent 数量。
-
-## 来源与发布边界
-
-主要依据 `anthropics/claude-plugins-official` 固定提交 `58267944f92187b7d6a1c822165c96c81c864806` 的 feature-dev 插件（Apache-2.0）和官方公开文档；精确文件与迁移差异见 [来源记录](docs/sources.md)。实现和提示词为原创适配，不复制商业许可的 Claude Code 核心文本，不声称获得完整私有实现。公开仓库可读不等于核心代码全部开源。
-
-这是实验性源码项目。`package.json` 的 `private: true` 仅用于防止误发布到 npm，不表示 GitHub 仓库必须私有。项目暂未选择开源许可证（`license: UNLICENSED`）；公开可读不等于已授予任意再分发许可。未发布到 npm，也未自动安装到用户环境；正式开源授权或包发布前另行确认许可证及第三方归属要求。
+`private: true` 仅防止误发布到 npm；GitHub 仓库公开。不是 Anthropic / OpenAI / Pi 官方项目。

@@ -1,0 +1,11 @@
+This package includes unmodified official feature-dev plugin source from:
+https://github.com/anthropics/claude-plugins-official
+Commit: 58267944f92187b7d6a1c822165c96c81c864806
+Copyright and license notices remain in upstream/LICENSE and
+upstream/plugins/feature-dev/LICENSE. No root or feature-dev NOTICE file
+exists in the inspected pinned upstream tree.
+
+The Pi adapter, model mapping, TodoWrite compatibility tool, and delegation
+bridge are this repository's additions, not Anthropic's implementation.
+This is not the proprietary Claude Code agent core, nor an official Anthropic
+or Pi package. No modifications were made to the vendored source bytes.
