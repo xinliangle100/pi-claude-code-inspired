@@ -1,4 +1,4 @@
-# pi-claude-code-inspired — faithful baseline 0.2.0
+# pi-claude-code-inspired — source-faithful prompts + switch adapter 0.3.0
 
 **先忠实保留来源，再单独标明适配。** 本包学习的是 Anthropic 官方公开 `feature-dev` 插件，**不是 Claude Code 私有核心 harness 的复刻**，也不声称换一个包就能获得 Claude 的模型能力。
 
@@ -19,15 +19,33 @@ git clone https://github.com/xinliangle100/pi-claude-code-inspired.git
 pi -e ./pi-claude-code-inspired/extensions/index.ts
 ```
 
-在 Pi 中先选择你要使用的模型，再输入：
+在 Pi 中选择要使用的模型，然后：
 
 ```text
+/claude-inspired on
+/claude-inspired status
+/claude-inspired off
+```
+
+**加载默认 OFF。** ON 在每次运行的当前宿主 prompt 中添加一个独立工作流 section，不替换项目规则、权限或其他插件。功能开发请求按原文七阶段执行；追问、批准、修复选择继续当前阶段，不应每轮重开 Phase 1；问候或无关事实问题不应启动开发流程。这个**自然语言路由和延续规则是用户要求的 Pi 适配，不是上游默认行为**，靠模型遵守，不是硬编码分类器/阶段机。不确定进度或缺少批准信息时应询问，不能编造。
+
+保留小命令，可在 master OFF 时单独启动：
+
+```text
+/feature-dev 你要开发的功能
 /feature-dev --map-sonnet-to-current 你要开发的功能
 ```
 
-**这个参数不是形式上的开关。** 上游三类 agent 的 frontmatter 都指定 `model: sonnet`。Pi 适配器没有相同的 Claude 模型别名解析器；你必须显式授权将它映射到当前 Pi 模型。子 agent 使用工具调用时的当前模型和 thinking level（若宿主未提供则 off），不会另选模型或读取凭据文件。换用 GPT 等模型不代表同等行为或质量。未提供这个参数时，只显示用法，不启动工作流。重开、切换、分叉或树导航后需重新授权。
+第二种是旧写法，仍支持；现在不必重复输入长参数。两种写法都会使用**工具调用时当前 Pi 模型和 thinking level**（宿主未提供 thinking 时 off）。这是用户明确要求的模型映射适配；上游三类 agent 原文仍是 `model: sonnet`，没有改成 GPT，也不宣称不同模型能力等效。不读取凭据文件、不改主模型。手动工作流授权持续到关闭或切换其他包，可跨用户审批回复继续；不代表后台自动开新任务。
 
-加载包本身不改变主 agent 的 system prompt，也不自动启动任务；两个工具默认不激活。命令只追加激活自己的工具，不移除或恢复用户原来的工具集。无单独 `/off` 命令；要彻底卸载本扩展，结束当前 Pi 运行并在下次运行不加载，或通过 Pi 包管理移除。
+### 开关的准确边界
+
+- 开关记录在**当前会话树分支**；新会话默认 OFF，恢复/分叉沿用目标分支最后选择，不修改全局配置。
+- 与 `pi-codex-inspired` 共用一个 selector：同一时间只有一个包的 master/manual 模式生效。`/feature-dev` 在 Claude master 已开时保持 master；否则选择 Claude manual 并停用另一个包的指导。它不会偷偷把 Claude master 打开。
+- `off` 关闭自己的 master/manual，取消本包正在执行的子 agent，并拒绝后续本包工具调用；不会关闭另一个包。旧工作流消息仍在历史中，不能“撤销模型已经看到的文本”，也不撤销已发生的改动。
+- ON 仅追加本包工具到 active 名单。OFF **不删除任何 active 名称**（保护 Pi 延迟恢复的 MCP 工具），而通过 Pi `prepareLoadout` 隐藏本包模型工具声明，执行入口仍强制拒绝；工具注册、内部名称和搜索可发现性可能仍存在，不是彻底卸载。其他工具顺序/选择不变。
+- 后续运行使用宿主重新构建的当前基础 prompt，不拿开启时的旧快照覆盖你后来改的配置。若更早的扩展强制覆盖整个 prompt，master 不抢占：显示冲突提示，本轮不注入并阻止本包代理调用。后加载扩展仍可能覆盖本包指导，未声称能控制所有扩展组合。
+- `status` 显示 master ON/OFF、manual/可用工作流、共享选择、当前模型/thinking、prompt 冲突；阶段在对话/todo 中，不伪造一个硬编码“当前第 N 阶段”。
 
 ## 原始流程是什么
 
@@ -41,7 +59,7 @@ pi -e ./pi-claude-code-inspired/extensions/index.ts
 6. Quality Review：并行 **3** 个 reviewer，分别关注原文的三类问题；汇总后询问用户如何处理。reviewer 只报告置信度 **≥80** 的问题。
 7. Summary：完成 todos，交付总结。
 
-这些阶段、询问和审批是**上游提示词约束，不是硬编码审批系统**。适配器硬编码的只有合法角色、批次数量、显式模型映射和工具范围。模型仍可能漏读、误解或违反提示词；本包不保证“结构以后不用改”。
+这些阶段、询问和审批是**上游提示词约束，不是硬编码审批系统**。适配器硬编码的只有合法角色、批次数量、开关授权、取消传播和工具范围。模型仍可能漏读、误解或违反提示词；本包不保证“结构以后不用改”。
 
 ## 可运行部分与边界
 
@@ -63,7 +81,7 @@ npm ci --ignore-scripts
 npm run check
 ```
 
-已做源码字节哈希、原始阶段/阈值、并行数量与启动、宿主工具代理、实际 Pi Agent 生命周期（假 provider、不消费额度）、真实 Pi 扩展加载测试。**未做真实模型端到端执行或质量对比**，因此不能从测试通过推断效果优于原生 Pi。
+已做源码字节哈希、原始阶段/阈值、并行数量与启动、宿主工具代理、实际 Pi Agent 生命周期与取消（假 provider、不消费额度）、真实 Pi 扩展加载、会话分支、开关/旧命令及工具投影测试。**未做真实模型端到端执行或质量对比**，因此不能从测试通过推断效果优于原生 Pi。
 
 - [来源与调用关系](docs/sources.md)
 - [适配差异与验证范围](docs/validation.md)

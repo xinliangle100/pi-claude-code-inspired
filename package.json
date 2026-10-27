@@ -1,6 +1,6 @@
 {
   "name": "pi-claude-code-inspired",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Source-pinned official feature-dev prompts with an explicit Pi compatibility adapter.",
   "type": "module",

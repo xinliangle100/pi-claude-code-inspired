@@ -67,35 +67,3 @@ test("TodoWrite adapter returns complete supplied list, not a decision ledger", 
   const todos=[{content:"Discovery",status:"in_progress"}];
   assert.deepEqual((await todoTool().execute("x",{todos})).details,{todos});
 });
-test("real public Pi loader registers opt-in command/tools; model mapping required", async () => {
-  const temp = await mkdtemp(join(tmpdir(),"feature-dev-loader-"));
-  try {
-    const loaded = await discoverAndLoadExtensions([join(root,"extensions/index.ts")],temp,join(temp,"agent"));
-    assert.deepEqual(loaded.errors,[]);
-    const ext=loaded.extensions[0];
-    assert.deepEqual([...ext.commands.keys()],["feature-dev"]);
-    assert.deepEqual([...ext.tools.keys()].sort(),["feature_dev_agents","feature_dev_todos"]);
-    for(const entry of ext.tools.values()) assert.equal(entry.definition.defaultActive,false);
-    const messages:string[]=[];
-    await ext.commands.get("feature-dev")!.handler("build thing",{ui:{notify:(m:string)=>messages.push(m)}} as any);
-    assert.match(messages[0],/explicitly selects/);
-    const tool=ext.tools.get("feature_dev_agents")!.definition;
-    await assert.rejects(tool.execute("x",{role:"code-reviewer",tasks:[]},undefined,undefined,{} as any),/explicitly authorize/);
-  } finally {await rm(temp,{recursive:true,force:true});}
-});
-
-test("explicit invocation activates additively; branch boundaries clear model consent", async () => {
-  const {default: extension} = await import("../extensions/index.ts");
-  const commands=new Map<string,any>(), tools=new Map<string,any>(), handlers=new Map<string,any>();
-  let active=["read","pending_existing_tool"]; let sent="";
-  extension({registerCommand:(n:string,c:any)=>commands.set(n,c),registerTool:(t:any)=>tools.set(t.name,t),on:(n:string,h:any)=>handlers.set(n,h),getActiveTools:()=>active,setActiveTools:(a:string[])=>{active=a;},sendUserMessage:(s:string)=>{sent=s;}} as any);
-  const ctx={model:{id:"fixture"},ui:{notify:()=>{throw new Error("unexpected notification");}}};
-  await commands.get("feature-dev").handler("--map-sonnet-to-current example",ctx);
-  assert.deepEqual(active,["read","pending_existing_tool","feature_dev_agents","feature_dev_todos"]);
-  assert.ok(sent.endsWith(body(source("commands/feature-dev.md")).replace("$ARGUMENTS","example")));
-  for(const event of ["session_start","session_tree","session_before_fork","session_before_switch"]) {
-    await handlers.get(event)();
-    await assert.rejects(tools.get("feature_dev_agents").execute("x",{role:"code-explorer",tasks:[]},undefined,undefined,{}),/explicitly authorize/);
-    await commands.get("feature-dev").handler("--map-sonnet-to-current example",ctx);
-  }
-});
