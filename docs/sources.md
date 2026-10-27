@@ -69,3 +69,7 @@ Pi 上游仓库：https://github.com/earendil-works/pi/tree/d5b3de22d0e24a3e9c38
 `extensions/sources.ts::masterWorkflow`：自然语言开发请求触发与跟进延续是明确分隔的 Pi 指导；原始 workflow 正文仍仅替换 `$ARGUMENTS`。公开插件不是 Claude Code 未公开完整 base prompt。
 
 Pi npm 1.4.0 的 `core/agent-session`：`_applyToolLoadout` 应用 `prepareLoadout`；`_installHiddenDeclarationsProjection` 在请求中隐藏声明，内部工具仍注册；`setActiveToolsByName` 在移除名称时清空 pending tools，因此本包只追加/等名刷新，绝不移除。`ExtensionRunner.emitBeforeAgentStart` 从基础 options 归一化当前运行，追加 owned section，不保存旧宿主 prompt。开关授权是硬机制，工作流路由、审批、阶段连续性仍是模型遵循提示词。
+
+## 0.4 全局默认与展示（Pi 适配）
+
+`config.ts` readDefaults/writeDefaults 只处理 getAgentDir 下的本包文件；`index.ts` installFeatureDev 在 session_start/session_tree/before_agent_start 将继承默认的选择投影成 shared selector v1，保留显式会话/其他包选择。`default on/off` 持久化配置，`inherit` 主动替换当前覆盖。`getArgumentCompletions` 接入 Pi TUI 补全，`ui.setWidget` 在 aboveEditor 显示状态，`ui.theme.fg("warning")` 使用默认主题黄色而非更换用户 footer。此版本没有修改 upstream 原文或上游基线。

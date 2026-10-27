@@ -5,26 +5,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverAndLoadExtensions, SessionManager } from "@earendil-works/pi-coding-agent";
-import extension from "../extensions/index.ts";
+import { installFeatureDev } from "../extensions/index.ts";
+import { readDefaults, writeDefaults, completions } from "../extensions/config.ts";
+import { randomUUID } from "node:crypto";
 import { body, masterWorkflow, source } from "../extensions/sources.ts";
 import { NONE, SELECTOR, selection } from "../extensions/selector.ts";
 const root=fileURLToPath(new URL("../",import.meta.url));
-function harness(existing?: SessionManager) {
+function harness(existing?: SessionManager, settingsPath=join(tmpdir(),`claude-test-${randomUUID()}`,"settings.json")) {
   const commands=new Map<string,any>(),tools=new Map<string,any>(),handlers=new Map<string,any>();
   const listeners=new Map<string,((data:any)=>void)[]>();
   const manager=existing??SessionManager.inMemory(root);
   let active=["read","other_plugin","pending_mcp"], sent="";
-  const notices:string[]=[];
+  const notices:string[]=[]; const widgets=new Map<string,any>();
   const model={id:"fixture",provider:"fixture",api:"openai-completions",name:"fixture",reasoning:true,input:["text"],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:32000,maxTokens:1000};
-  const ctx:any={model,thinkingLevel:"high",sessionManager:manager,isProjectTrusted:()=>true,tools:[],ui:{notify:(s:string)=>notices.push(s)}};
+  const ctx:any={hasUI:true,model,thinkingLevel:"high",sessionManager:manager,isProjectTrusted:()=>true,tools:[],ui:{notify:(s:string)=>notices.push(s),theme:{fg:(color:string,text:string)=>`<${color}>${text}</${color}>`},setWidget:(key:string,value:any)=>widgets.set(key,value)}};
   const api:any={registerCommand:(n:string,c:any)=>commands.set(n,c),registerTool:(t:any)=>tools.set(t.name,t),on:(n:string,h:any)=>handlers.set(n,h),getActiveTools:()=>active,setActiveTools:(a:string[])=>{assert.ok(active.every(n=>a.includes(n)),"never remove existing/pending tools");active=a;},appendEntry:(n:string,d:any)=>manager.appendCustomEntry(n,d),sendUserMessage:(s:string)=>{sent=s;},events:{on:(n:string,h:any)=>{listeners.set(n,[...(listeners.get(n)??[]),h]);},emit:(n:string,d:any)=>listeners.get(n)?.forEach(h=>h(d))}};
-  extension(api);
+  installFeatureDev(api,settingsPath);
   const command=(args:string)=>commands.get("claude-inspired").handler(args,ctx);
   const run=async(prompt="build feature",base="host",force?:string)=>{
     const e:any={prompt,messageType:"user",systemPrompt:base,systemPromptOptions:{sections:{other_extension:"keep"},forceSystemPrompt:force}};
     await handlers.get("before_agent_start")(e,ctx);return e;
   };
-  return {api,ctx,manager,commands,tools,handlers,command,run,notices,get active(){return active;},get sent(){return sent;}};
+  return {api,ctx,manager,widgets,commands,tools,handlers,command,run,notices,get active(){return active;},get sent(){return sent;}};
 }
 test("real Pi loader registers default-off commands and deferred guarded tools",async()=>{
   const temp=await mkdtemp(join(tmpdir(),"claude-master-"));
@@ -59,7 +61,7 @@ test("manual command and old flag keep exact source, select manual mode, off rev
     await h.commands.get("feature-dev").handler(input,h.ctx);
     assert.equal(selection(h.ctx).mode,"manual");
     assert.ok(h.sent.endsWith(body(source("commands/feature-dev.md")).replace("$ARGUMENTS","feature A")));
-    await h.command("status");assert.match(h.notices.at(-1)!,/OFF; workflow: manual feature-dev/);
+    await h.command("status");assert.match(h.notices.at(-1)!,/MANUAL; workflow: manual feature-dev/);
     await h.command("off");
     await assert.rejects(h.tools.get("feature_dev_todos").execute("x",{todos:[]},undefined,undefined,h.ctx),/disabled/);
   }
@@ -71,7 +73,7 @@ test("actual SessionManager branch/resume selection and cross-package fail-close
   await h.command("off");
   h.manager.branch(on);await h.handlers.get("session_tree")({},h.ctx);assert.equal(selection(h.ctx).mode,"master");
   const resumed=harness(h.manager);await resumed.handlers.get("session_start")({},resumed.ctx);assert.ok((await resumed.run()).systemPromptOptions.sections.pi_claude_inspired);
-  h.manager.branch(base);await h.handlers.get("session_tree")({},h.ctx);assert.deepEqual(selection(h.ctx),NONE);
+  h.manager.branch(base);await h.handlers.get("session_tree")({},h.ctx);assert.equal(selection(h.ctx).owner,null);
   h.manager.appendCustomEntry(SELECTOR,{version:1,owner:"codex",mode:"master"});
   h.api.events.emit(SELECTOR,{});await h.command("off");assert.equal(selection(h.ctx).owner,"codex");
   await h.commands.get("feature-dev").handler("new feature",h.ctx);assert.equal(selection(h.ctx).owner,"claude");assert.equal(selection(h.ctx).mode,"manual");
@@ -81,6 +83,7 @@ test("opaque earlier override preserved and blocks master tools visibly",async()
   const h=harness();await h.command("on");const e=await h.run("feature","protected","protected");
   assert.equal(e.systemPromptOptions.forceSystemPrompt,"protected");assert.equal(e.systemPromptOptions.sections.pi_claude_inspired,undefined);
   assert.match(h.notices.at(-1)!,/opaque/);
+  await h.command("status"); assert.match(h.notices.at(-1)!,/Claude-inspired: BLOCKED/);
   await assert.rejects(h.tools.get("feature_dev_todos").execute("x",{todos:[]},undefined,undefined,h.ctx),/blocked/);
   await h.run();assert.equal(h.tools.get("feature_dev_todos").prepareLoadout(),undefined);
 });
@@ -154,4 +157,72 @@ test("real ExtensionRunner rebuilds fresh structured host/project sections acros
     assert.equal(next.systemPromptOptions.customPrompt,"NEW PI RULES");
     assert.deepEqual(next.systemPromptOptions.contextFiles,base.contextFiles);
   }finally{await rm(temp,{recursive:true,force:true});}
+});
+
+test("persistent default, separate sessions, explicit overrides, inherit and tagged same-value override", async()=>{
+  const dir=await mkdtemp(join(tmpdir(),"claude-defaults-")), path=join(dir,"settings.json");
+  try {
+    const a=harness(undefined,path); await a.handlers.get("session_start")({},a.ctx);
+    await a.command("default on"); assert.equal(selection(a.ctx).owner,"claude");
+    assert.equal(readDefaults(path).enabled,true);
+    const b=harness(undefined,path); await b.handlers.get("session_start")({},b.ctx);
+    assert.equal(selection(b.ctx).owner,"claude");
+    await b.command("off"); await b.command("default on"); await b.run(); assert.equal(selection(b.ctx).owner,null);
+    await a.command("on"); await a.command("default off"); await a.run(); assert.equal(selection(a.ctx).owner,"claude");
+    await a.command("inherit"); assert.equal(selection(a.ctx).owner,null);
+    await a.command("off"); await a.command("default on"); assert.equal(selection(a.ctx).owner,null);
+    await a.command("inherit"); assert.equal(selection(a.ctx).owner,"claude");
+    const resumed=harness(b.manager,path); await resumed.handlers.get("session_start")({},resumed.ctx); assert.equal(selection(resumed.ctx).owner,null);
+    await b.command("inherit"); assert.equal(selection(b.ctx).owner,"claude");
+    writeDefaults(path,false); await b.run(); assert.equal(selection(b.ctx).owner,null);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test("global changes never steal explicit Codex/NONE selection; inherit deliberately replaces it",async()=>{
+  const dir=await mkdtemp(join(tmpdir(),"claude-owner-")), path=join(dir,"settings.json");
+  try {
+    const h=harness(undefined,path);
+    h.manager.appendCustomEntry(SELECTOR,{version:1,owner:"codex",mode:"master"});
+    await h.command("default on"); await h.run(); assert.equal(selection(h.ctx).owner,"codex");
+    h.manager.appendCustomEntry(SELECTOR,NONE);await h.run();assert.equal(selection(h.ctx).owner,null);
+    await h.command("inherit"); assert.equal(selection(h.ctx).owner,"claude");
+    h.manager.appendCustomEntry(SELECTOR,{version:999,owner:"claude",mode:"master",source:"claude-default/v1"});
+    await h.run(); assert.equal(selection(h.ctx).owner,null);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test("widget shows active yellow label, manual, blocked and off, follows branch, cleans up; non-UI safe",async()=>{
+  const h=harness(); await h.handlers.get("session_start")({},h.ctx);
+  assert.match(h.widgets.get("claude-inspired")[0],/dim.*OFF.*default/);
+  const base=h.manager.getLeafId()!;
+  await h.command("on");assert.match(h.widgets.get("claude-inspired")[0],/<warning>Claude-inspired<\/warning>: ON.*session/);
+  await h.run("feature","opaque","opaque"); assert.match(h.widgets.get("claude-inspired")[0],/dim.*BLOCKED/);
+  await h.command("off");await h.commands.get("feature-dev").handler("feature",h.ctx); assert.match(h.widgets.get("claude-inspired")[0],/warning.*MANUAL/);
+  h.manager.branch(base); await h.handlers.get("session_tree")({},h.ctx);assert.match(h.widgets.get("claude-inspired")[0],/OFF.*default/);
+  await h.handlers.get("session_shutdown")({},h.ctx);assert.equal(h.widgets.get("claude-inspired"),undefined);
+  h.ctx.hasUI=false;h.ctx.ui.setWidget=()=>{throw new Error("no UI")};await h.command("on");await h.run();
+});
+
+test("global config fails closed without overwriting malformed settings and command completion covers nested arguments",async()=>{
+  const { writeFile, readFile }=await import("node:fs/promises");
+  const dir=await mkdtemp(join(tmpdir(),"claude-invalid-")), path=join(dir,"settings.json");
+  try {
+    await writeFile(path,"invalid");const h=harness(undefined,path);await h.handlers.get("session_start")({},h.ctx);
+    assert.equal(selection(h.ctx).owner,null);await h.command("default on");assert.equal(await readFile(path,"utf8"),"invalid");assert.match(h.notices.at(-1)!,/Repair/);
+    assert.deepEqual(completions("default ").map(x=>x.value),["default on","default off"]);
+    assert.deepEqual(completions("o").map(x=>x.value),["on","off"]);
+    assert.deepEqual(completions("xyz"),[]);
+    assert.equal(h.commands.get("claude-inspired").getArgumentCompletions,completions);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test("actual Pi TUI completion replaces full nested argument without duplicating default",async()=>{
+  const { CombinedAutocompleteProvider }=await import("@earendil-works/pi-tui");
+  const provider=new CombinedAutocompleteProvider([{name:"claude-inspired",getArgumentCompletions:completions}],root);
+  for (const [input,wanted] of [["/claude-inspired ","on"],["/claude-inspired o","off"],["/claude-inspired d","default on"],["/claude-inspired default ","default off"],["/claude-inspired default o","default on"],["/claude-inspired i","inherit"]]) {
+    const result=await provider.getSuggestions([input],0,input.length,{signal:new AbortController().signal});
+    assert.ok(result);const item=result.items.find(x=>x.value===wanted);assert.ok(item);
+    const applied=provider.applyCompletion([input],0,input.length,item,result.prefix);
+    assert.equal(applied.lines[0].trimEnd(),`/claude-inspired ${wanted}`);
+  }
 });

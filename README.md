@@ -1,4 +1,4 @@
-# pi-claude-code-inspired — source-faithful prompts + switch adapter 0.3.0
+# pi-claude-code-inspired — source-faithful prompts + switch adapter 0.4.0
 
 **先忠实保留来源，再单独标明适配。** 本包学习的是 Anthropic 官方公开 `feature-dev` 插件，**不是 Claude Code 私有核心 harness 的复刻**，也不声称换一个包就能获得 Claude 的模型能力。
 
@@ -6,7 +6,7 @@
 
 ## 安装与使用
 
-需要已安装并登录的 Pi；适配器验证版本为 `@earendil-works/pi-coding-agent` **1.4.0**，Node >=22.19.0。本仓库不会帮你安装 Pi、修改全局设置或申请其他凭据。
+需要已安装并登录的 Pi；适配器验证版本为 `@earendil-works/pi-coding-agent` **1.4.0**，Node >=22.19.0。本仓库不会帮你安装 Pi 或申请其他凭据；只有显式执行下述 default 命令才写本包自己的全局配置，不改 Pi settings.json。
 
 ```sh
 pi install git:github.com/xinliangle100/pi-claude-code-inspired
@@ -22,12 +22,21 @@ pi -e ./pi-claude-code-inspired/extensions/index.ts
 在 Pi 中选择要使用的模型，然后：
 
 ```text
-/claude-inspired on
-/claude-inspired status
-/claude-inspired off
+/claude-inspired default on    # 以后新会话默认开启，设置一次即可
+/claude-inspired off           # 仅当前会话分支关闭，不改全局
+/claude-inspired on            # 仅当前会话分支开启，不改全局
+/claude-inspired inherit       # 当前分支重新跟随全局默认
+/claude-inspired default off   # 以后新会话默认关闭
+/claude-inspired status        # 查看实际状态、来源和配置路径
 ```
 
-**加载默认 OFF。** ON 在每次运行的当前宿主 prompt 中添加一个独立工作流 section，不替换项目规则、权限或其他插件。功能开发请求按原文七阶段执行；追问、批准、修复选择继续当前阶段，不应每轮重开 Phase 1；问候或无关事实问题不应启动开发流程。这个**自然语言路由和延续规则是用户要求的 Pi 适配，不是上游默认行为**，靠模型遵守，不是硬编码分类器/阶段机。不确定进度或缺少批准信息时应询问，不能编造。
+**首次安装的全局默认是 OFF。** 执行一次 `/claude-inspired default on` 后，新会话自动启用，不必每次再开。已有会话明确选过 on/off（包括 0.3 的选择）则保留覆盖，需要执行一次 `inherit` 才跟随全局。恢复、分叉、树导航沿用目标分支的覆盖；跟随全局的分支会在会话恢复、下一轮运行或 default 命令时重新读取配置。其他已经打开的 Pi 进程没有文件监听，下一轮刷新，不会后台打断正在执行的请求。
+
+输入 `/claude-inspired ` 后可 Tab 补全 `on`、`off`、`status`、`inherit`、`default on` 和 `default off`；`default ` 的第二级参数也可补全。
+
+输入框上方有单行 **Claude-inspired: ON** 状态，启用时名称采用主题 warning 色（Pi 默认主题为黄色），并标明 `default` 或 `session`。关闭显示灰色 OFF，手动小命令显示 MANUAL，提示词冲突显示 BLOCKED；不替换你的 footer，不依赖 footer 插件是否显示 setStatus。非交互模式不渲染 widget，仍可查询 status。
+
+ ON 在每次运行的当前宿主 prompt 中添加一个独立工作流 section，不替换项目规则、权限或其他插件。功能开发请求按原文七阶段执行；追问、批准、修复选择继续当前阶段，不应每轮重开 Phase 1；问候或无关事实问题不应启动开发流程。这个**自然语言路由和延续规则是用户要求的 Pi 适配，不是上游默认行为**，靠模型遵守，不是硬编码分类器/阶段机。不确定进度或缺少批准信息时应询问，不能编造。
 
 保留小命令，可在 master OFF 时单独启动：
 
@@ -40,12 +49,13 @@ pi -e ./pi-claude-code-inspired/extensions/index.ts
 
 ### 开关的准确边界
 
-- 开关记录在**当前会话树分支**；新会话默认 OFF，恢复/分叉沿用目标分支最后选择，不修改全局配置。
-- 与 `pi-codex-inspired` 共用一个 selector：同一时间只有一个包的 master/manual 模式生效。`/feature-dev` 在 Claude master 已开时保持 master；否则选择 Claude manual 并停用另一个包的指导。它不会偷偷把 Claude master 打开。
+- 全局默认保存在 Pi agent 目录下 `pi-claude-code-inspired.json`，默认位置为 `~/.pi/agent/pi-claude-code-inspired.json`，尊重 Pi 的 `PI_CODING_AGENT_DIR`。只存版本和 enabled，不存模型/凭据。采用临时文件 + rename 写入；损坏或未知配置默认关闭并报错，不静默覆盖损坏文件。
+- `on/off` 只改当前会话树分支，`default on/off` 只改全局默认，不覆盖当前明确的会话选择；`inherit` 清除本分支覆盖，立即按全局选择。OFF 历史分支不会因为全局 ON 而悄悄重新开启。
+- 全局命令不会抢占已明确选择的 Codex；`inherit` 是主动重新选择 Claude 全局默认，会替换当前 Codex 选择。与 `pi-codex-inspired` 共用一个 selector：同一时间只有一个包的 master/manual 模式生效。`/feature-dev` 在 Claude master 已开时保持 master；否则选择 Claude manual 并停用另一个包的指导。它不会偷偷把 Claude master 打开。
 - `off` 关闭自己的 master/manual，取消本包正在执行的子 agent，并拒绝后续本包工具调用；不会关闭另一个包。旧工作流消息仍在历史中，不能“撤销模型已经看到的文本”，也不撤销已发生的改动。
 - ON 仅追加本包工具到 active 名单。OFF **不删除任何 active 名称**（保护 Pi 延迟恢复的 MCP 工具），而通过 Pi `prepareLoadout` 隐藏本包模型工具声明，执行入口仍强制拒绝；工具注册、内部名称和搜索可发现性可能仍存在，不是彻底卸载。其他工具顺序/选择不变。
 - 后续运行使用宿主重新构建的当前基础 prompt，不拿开启时的旧快照覆盖你后来改的配置。若更早的扩展强制覆盖整个 prompt，master 不抢占：显示冲突提示，本轮不注入并阻止本包代理调用。后加载扩展仍可能覆盖本包指导，未声称能控制所有扩展组合。
-- `status` 显示 master ON/OFF、manual/可用工作流、共享选择、当前模型/thinking、prompt 冲突；阶段在对话/todo 中，不伪造一个硬编码“当前第 N 阶段”。
+- `status` 显示 master ON/OFF、manual/可用工作流、共享选择、当前模型/thinking、prompt 冲突、全局默认、会话覆盖来源和配置路径；阶段在对话/todo 中，不伪造一个硬编码“当前第 N 阶段”。
 
 ## 原始流程是什么
 
@@ -81,7 +91,7 @@ npm ci --ignore-scripts
 npm run check
 ```
 
-已做源码字节哈希、原始阶段/阈值、并行数量与启动、宿主工具代理、实际 Pi Agent 生命周期与取消（假 provider、不消费额度）、真实 Pi 扩展加载、会话分支、开关/旧命令及工具投影测试。**未做真实模型端到端执行或质量对比**，因此不能从测试通过推断效果优于原生 Pi。
+已做源码字节哈希、原始阶段/阈值、并行数量与启动、宿主工具代理、实际 Pi Agent 生命周期与取消（假 provider、不消费额度）、真实 Pi 扩展加载、会话分支、全局配置/覆盖、真实 TUI 补全、状态 widget 生命周期、开关/旧命令及工具投影测试。**未做真实模型端到端执行或质量对比**，因此不能从测试通过推断效果优于原生 Pi。
 
 - [来源与调用关系](docs/sources.md)
 - [适配差异与验证范围](docs/validation.md)

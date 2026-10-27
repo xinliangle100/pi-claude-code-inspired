@@ -27,6 +27,13 @@
 7. 仅宿主 executeTool 可执行代理的文件查询，保留宿主 hook 链；不继承整个父 system prompt，不声称 OS sandbox。
 8. 主 agent 提供 review diff 是缺失 shell 能力下的明确接口边界，不是修改上游 reviewer allowlist。
 
-0.3 新增 master 开关、自然语言触发、跟进延续和共享 selector 属于用户要求的 Pi 适配，不是上游来源。新会话默认 OFF；branch last-entry 决定恢复状态。`prepareLoadout` 仅隐藏本包声明；注册/发现能力保留，执行 guard 关闭后拒绝。主 Agent 的行为不会因隐藏声明而忘记历史；关闭不撤销已发生操作。没有宣称对任意第三方扩展加载顺序都能完整保证 prompt 优先级。
+0.3 新增 master 开关、自然语言触发、跟进延续和共享 selector 属于用户要求的 Pi 适配，不是上游来源。0.4 起新会话跟随全局默认（首次安装 OFF），branch 的明确 last-entry 优先于全局。`prepareLoadout` 仅隐藏本包声明；注册/发现能力保留，执行 guard 关闭后拒绝。主 Agent 的行为不会因隐藏声明而忘记历史；关闭不撤销已发生操作。没有宣称对任意第三方扩展加载顺序都能完整保证 prompt 优先级。
 
 工具声明隐藏还通过真实 Pi `AgentSession` 的 `_applyToolLoadout` / `_installHiddenDeclarationsProjection` / `setActiveToolsByName` 做有界集成测试：使用测试注册表 fixture，不启动整个交互会话；确认 on/off/on 声明投影、外部工具不变、尚未注册 MCP 名称未清空。这些私有方法仅用于锁定 npm 1.4.0 行为的测试，生产扩展只用公开 API。
+
+0.4 新增部分同样是本包 Pi UX 适配，不是 Anthropic 官方流程：
+- 独立版本化 JSON 全局配置，临时目录测试跨实例读写；没有修改实际用户配置。
+- 默认选择带 source 标记，兼容 Codex 0.3 selector v1；显式 on/off 即使状态相同也写入会话覆盖，未知 selector fail closed。
+- 会话覆盖/恢复/分支与 inherit，Codex 显式选择不被 default 命令抢占；关闭保留 host 工具。
+- aboveEditor widget 的 ON/MANUAL/OFF/BLOCKED 和 cleanup/no-UI 路径；默认主题 warning 为黄色，用户主题可自定义颜色。未声称做过用户真实终端截图验收。
+- 真实 Pi TUI CombinedAutocompleteProvider.getSuggestions/applyCompletion 测试一级和二级参数替换，不只测试候选列表。
